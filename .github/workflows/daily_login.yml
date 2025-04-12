@@ -1,0 +1,65 @@
+name: NodeLoc 每日自动登录
+
+on:
+  schedule:
+    # 每天北京时间上午8:30运行（UTC时间0:30）
+    - cron: '30 0 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  login:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+      
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install playwright requests
+        
+    - name: 安装Playwright浏览器
+      run: |
+        playwright install chromium
+        
+    - name: 执行登录脚本
+      env:
+        NODELOC_USERNAME: ${{ secrets.NODELOC_USERNAME }}
+        NODELOC_PASSWORD: ${{ secrets.NODELOC_PASSWORD }}
+      run: |
+        python login_playwright.py
+        
+    - name: 上传登录截图和日志
+      if: always()  # 无论成功或失败都上传
+      uses: actions/upload-artifact@v3
+      with:
+        name: login-artifacts
+        path: |
+          nodeloc_login_*.png
+          nodeloc_tasks_*.png
+          login_history.log
+        retention-days: 7
+        
+    - name: 发送登录状态通知
+      if: always()
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{ secrets.EMAIL_USERNAME }}
+        password: ${{ secrets.EMAIL_PASSWORD }}
+        subject: NodeLoc 自动登录状态 - ${{ job.status }}
+        body: |
+          NodeLoc 自动登录任务已完成，状态: ${{ job.status }}
+          
+          运行时间: ${{ github.event.repository.updated_at }}
+          
+          查看GitHub Actions运行日志获取更多详情。
+        to: ${{ secrets.NOTIFICATION_EMAIL }}
+        from: GitHub Actions
